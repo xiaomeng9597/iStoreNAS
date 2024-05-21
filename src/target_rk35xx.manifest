@@ -9,7 +9,6 @@ luci-app-aria2
 luci-i18n-aria2-zh-cn
 app-meta-aria2
 
-rkwifi-firmware-ap6236
 rkwifi-firmware-ap6398s
 
 ntpdate
