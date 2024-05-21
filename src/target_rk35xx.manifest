@@ -1,8 +1,19 @@
 nginx
+luci-nginx
 nginx-mod-luci
 routergo
 luci-app-routerdog
+app-meta-routerdog
 aria2
 luci-app-aria2
-app-meta-routerdog
+luci-i18n-aria2-zh-cn
+app-meta-aria2
 
+rkwifi-firmware-ap6236
+rkwifi-firmware-ap6398s
+rkwifi-firmware-hcy6355
+
+ntpdate
+hdparm
+stress
+coreutils-nohup
