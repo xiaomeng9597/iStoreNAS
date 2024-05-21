@@ -6,7 +6,7 @@ on:
       target:
         description: 'build target ["x86_64", "rk35xx", "rk33xx", "rpi4", "all"]'
         required: true
-        default: 'all'
+        default: 'rk35xx'
 env:
   TZ: Asia/Shanghai
 
@@ -71,11 +71,15 @@ jobs:
           mkdir dl
           wget -O dl/${IB_NAME}.tar.xz ${IB_URL}${IB_NAME}.tar.xz
           wget -O dl/sha256sums ${IB_URL}sha256sums
+          wget -O dl/${MF_NAME} ${IB_URL}${MF_NAME}
+         
+          # cat src/target_rk35xx.manifest
           [ -s dl/sha256sums ]
           [ -s dl/${IB_NAME}.tar.xz ]
+          [ -s dl/${MF_NAME} ]
           grep -Fq ${IB_NAME}.tar.xz dl/sha256sums
-          cd dl && sha256sum -c --ignore-missing --status sha256sums
-          wget -O dl/${MF_NAME} ${IB_URL}${MF_NAME}
+          #cd dl && sha256sum -c --ignore-missing --status sha256sums
+          cd dl
 
       - name: Unpack IB
         run: |
@@ -83,7 +87,24 @@ jobs:
           tar -C ib --strip-components=1 -xJf dl/${IB_NAME}.tar.xz
           cp -a src/* ib/
           ls patches/ | sort | xargs -n1 sh -c 'patch -p1 -d ib -i ../patches/$0'
-          sed -i 's/ unofficial/ oversea/' ib/Makefile
+          sed -i 's/ unofficial/ by xiaomeng9597/' ib/Makefile
+          # sed -i "/.*uhttpd.*/d" ib/.config
+          echo "CONFIG_TARGET_DEVICE_rockchip_rk35xx_DEVICE_jp_tvbox=y
+          CONFIG_TARGET_DEVICE_rockchip_rk35xx_DEVICE_panther_x2=y" >> ib/.config
+          # cat ib/.config
+          # sed -i 's/6afc06598fa8e3bc907cff75f995f372df51d40a284e260de78a3421b1f18218/9b293ba9da352d39286cfd1d6bfa278c/g' ib/include/kernel-5.10
+          sed -i "/.*CONFIG_ROCKCHIP_RGA2.*/d" ib/target/linux/rockchip/rk35xx/config-5.10
+          sed -i "/.*CONFIG_ROCKCHIP_RGA2.*/d" ib/target/linux/rockchip/rk35xx/config-5.10.orig
+          # sed -i "/.*CONFIG_ROCKCHIP_RGA2.*/d" ib/target/linux/rockchip/rk35xx/files/drivers/video/rockchip/Makefile
+          # cat ib/target/linux/rockchip/rk35xx/config-5.10
+          cat ib/target/linux/rockchip/rk35xx/files/drivers/video/rockchip/Makefile
+          cp -f configfiles/rk3566-panther-x2.dts ib/target/linux/rockchip/dts/rk3568/rk3566-panther-x2.dts
+          cp -f configfiles/rk3566-jp-tvbox.dts ib/target/linux/rockchip/dts/rk3568/rk3566-jp-tvbox.dts
+          cp -f configfiles/rk3566-panther-x2.dtb ib/build_dir/target-aarch64_cortex-a53_musl/linux-rockchip_rk35xx/image-rk3566-panther-x2.dtb
+          cp -f configfiles/rk3566-jp-tvbox.dtb ib/build_dir/target-aarch64_cortex-a53_musl/linux-rockchip_rk35xx/image-rk3566-jp-tvbox.dtb
+          
+          VERSION_VALUE=$(grep -o 'REVISION:=[0-9]\+' ib/include/version.mk | cut -d'=' -f2)
+          echo "VERSION_VALUE2=$VERSION_VALUE" >> $GITHUB_ENV
           ls packages/all | cut -d "_" -f 1 | xargs -n1 sh -c 'rm ib/packages/$0*.ipk'
           cp packages/all/*.ipk ib/packages/
           mkdir -p ib/files
@@ -110,13 +131,26 @@ jobs:
 
       - name: Build
         run: |
+          echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
           cd ib && make -f multi.mk image_multi FILES="files"
+          #cp -fpR /home/runner/work/iStoreNAS/iStoreNAS/ib/bin/targets/rockchip/rk35xx/istoreos-rockchip-rk35xx-lyt_t68m-squashfs-sysupgrade.img.gz ../build/t68m/istoreos-22.03.6-2024041213-t68m-squashfs.img.gz
+          #cp /home/runner/work/iStoreNAS/iStoreNAS/ib/build_dir/target-aarch64_cortex-a53_musl/linux-rockchip_rk35xx/tmp/istoreos-rockchip-rk35xx-panther_x2-squashfs-sysupgrade.img.gz
 
       - name: Pack
         run: |
           cd ib
           make -f release.mk IB=1
           make -f multi.mk release_env >> "$GITHUB_ENV"
+          # ls /home/runner/work/iStoreNAS/iStoreNAS/ib/build_dir/target-aarch64_cortex-a53_musl/linux-rockchip_rk35xx/tmp/
+          ls /home/runner/work/iStoreNAS/iStoreNAS/ib/bin/targets/rockchip/rk35xx/
+          mkdir -p ../build/iStoreNAS
+          mkdir -p ../build/iStoreNAS/panther-x2
+          mkdir -p ../build/iStoreNAS/jp-tvbox
+          cp -fpR /home/runner/work/iStoreNAS/iStoreNAS/ib/bin/targets/rockchip/rk35xx/istoreos-rockchip-rk35xx-panther_x2-squashfs-sysupgrade.img.gz ../build/iStoreNAS/panther-x2/istoreos-22.03.6-${{ env.VERSION_VALUE2 }}-panther-x2-squashfs.img.gz
+          cp -fpR /home/runner/work/iStoreNAS/iStoreNAS/ib/bin/targets/rockchip/rk35xx/istoreos-rockchip-rk35xx-jp_tvbox-squashfs-sysupgrade.img.gz ../build/iStoreNAS/jp-tvbox/istoreos-22.03.6-${{ env.VERSION_VALUE2 }}-jp-tvbox-squashfs.img.gz
+          ls ../build/
+          ls ../build/iStoreNAS/panther-x2
+          ls ../build/iStoreNAS/jp-tvbox
 
       - name: Compare manifest
         run: |
@@ -124,23 +158,13 @@ jobs:
           diff ../dl/${MF_NAME} ${IB_BIN_DIR}/${MF_NAME} || true
 
       - name: Upload
-        env:
-          OCI_REGISTER: ghcr.io
-          OCI_USERNAME: ${{ secrets.OCI_USERNAME }}
-          OCI_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
-          OCI_PATH: ${{ secrets.OCI_PATH }}
-          IMAGE_SOURCE: ${{ secrets.IMAGE_SOURCE }}
-        run: |
-          oras login -u ${OCI_USERNAME} -p ${OCI_PASSWORD} ${OCI_REGISTER}
-          cd build
-          for board in `ls ./`; do
-            [ -s $board/version.index ] || continue
-            img=$(head -1 $board/version.latest | sed -E 's/.*\((.+)\).*/\1/')
-            ver=$(head -1 $board/version.index)
-            echo "Uploading $board firmware..."
-            oras push --annotation "org.istoreos.version=$ver" \
-              --annotation "org.opencontainers.image.source=${IMAGE_SOURCE}" \
-              --annotation "org.opencontainers.image.description=iStoreOS $ver for $board" \
-              ${OCI_REGISTER}/${OCI_PATH}/$board:latest \
-              ./$board/$img:application/vnd.istoreos.firmware
-          done
+        uses: actions/upload-artifact@main
+        with:
+          name: OpenWrt_ok${{ env.FILE_DATE }}
+          path: build
+
+      - name: Upload2
+        uses: actions/upload-artifact@main
+        with:
+          name: OpenWrt_build${{ env.FILE_DATE }}
+          path: build/iStoreNAS
